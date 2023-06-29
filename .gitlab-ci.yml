@@ -1,0 +1,5 @@
+test:
+  image: jiegec/rust:1.70-bullseye-tuna
+  script:
+    - cargo build
+    - cargo test -- --test-threads=1
