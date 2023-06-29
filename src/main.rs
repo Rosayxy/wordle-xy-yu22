@@ -103,10 +103,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let is_tty = atty::is(atty::Stream::Stdout);
 
     if is_tty {
-        println!(
+        /*println!(
             "I am in a tty. Please print {}!",
             console::style("colorful characters").bold().blink().blue()
-        );
+        );*/
     }/*  else {
         println!("I am not in a tty. Please print according to test requirements!");
     }*/
@@ -124,6 +124,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         print!("{}",console::style("please input the answer word:").bold().red());
         io::stdout().flush().unwrap();
     }
+        line.clear();
         io::stdin()
         .read_line(&mut line)
         .expect("Failed to read line");
@@ -139,15 +140,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let str=format!("your {} guess:(good luck)",read_times);
             print!("{}",console::style(str).italic().magenta());
             io::stdout().flush().unwrap();
-        }        
+        }      
+        line.clear();  
         io::stdin()
         .read_line(&mut line)
         .expect("Failed to read line");
         let guess_word=line.trim().to_string();
         //check if invalid
         let mut flag=0;
+        let guess_word_to_lower=guess_word.to_lowercase();
         for it in builtin_words::ACCEPTABLE{
-            if (*it==guess_word){
+            if *it==guess_word_to_lower{
                 flag=1;
                 break;
             }
@@ -195,7 +198,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }else{
         if is_tty{
-            let str=format!("Sorry you failed,better luck next time!\nThe answer is{}",ans_word);
+            let str=format!("Sorry you failed,better luck next time!\nThe answer is {}",ans_word);
             println!("{}",console::style(str).italic().magenta());
         }else{
             println!("FAILED {}",ans_word);
