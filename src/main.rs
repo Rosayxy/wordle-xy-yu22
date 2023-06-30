@@ -1,12 +1,15 @@
 mod builtin_words;
 use console;
+use rand::Rng;
 use std::io::{self, Write};
+use clap::Parser;
 enum Status{
     R,
     Y,
     G,
     X,
 }
+
 impl Status{
     fn parse_to_value(&self)->i32{
         match &self{
@@ -56,15 +59,15 @@ fn update_letter_status(ans_word:&str,guess_word:&str,letter_status:&mut [i32;26
         for cans in ans_word.chars(){
             if cguess==cans{
                 if guess_index==ans_index{
-                    letter_status[(cans as usize)-('A' as usize)]=3;
-                }else if letter_status[(cans as usize)-('A' as usize)]<2{
-                    letter_status[(cans as usize)-('A' as usize)]=2;
+                    letter_status[(cans as usize)-('a' as usize)]=3;
+                }else if letter_status[(cans as usize)-('a' as usize)]<2{
+                    letter_status[(cans as usize)-('a' as usize)]=2;
                 }equal_flag=1;
                 break;
             }ans_index+=1;
         }guess_index+=1;
         if equal_flag==0{
-            letter_status[(cguess as usize)-('A' as usize)]=1;
+            letter_status[(cguess as usize)-('a' as usize)]=1;
         }
     }
 }
@@ -90,7 +93,29 @@ fn create_guesses_ele(ans_word:&str,guess_word:&str)->Vec<(char,Status)>{
         }if equal_flag==0{
             vec_guesses_ele.push((c,Status::new_from_value(1)));
         }guess_index+=1;
-    }return vec_guesses_ele;
+    }
+    //check if redundant
+    let mut redundant_vector:Vec<i32>=Vec::new();
+    let mut index=0;
+    for (c,s) in &vec_guesses_ele{
+        if(s.parse_to_value()==2){
+            let mut other_index=0;
+            for (cc,ss) in &vec_guesses_ele{
+                if (cc==c)&&(other_index!=index){
+                    if ss.parse_to_value()==3{
+                        redundant_vector.push(index);
+                    }else if other_index<index{
+                        redundant_vector.push(index);
+                    }else{}
+                }else{}
+                other_index+=1;
+            }
+        }else{}
+        index+=1;
+    }for i in redundant_vector{
+        vec_guesses_ele[i as usize].1=Status::new_from_value(1);
+    }
+    return vec_guesses_ele;
 }
 fn create_guesses_invalid(guess_word:&str)->Vec<(char,Status)>{
     let mut count=0;
@@ -99,17 +124,27 @@ fn create_guesses_invalid(guess_word:&str)->Vec<(char,Status)>{
         v.push((c,Status::new_from_value(0)));
     }v
 }
+#[derive(Parser)]
+struct Cli{
+    #[arg(short,long)]
+    word: Option<String>,
+    #[arg(short,long)]
+    random: bool,
+}
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let is_tty = atty::is(atty::Stream::Stdout);
-
-    if is_tty {
-        /*println!(
-            "I am in a tty. Please print {}!",
-            console::style("colorful characters").bold().blink().blue()
-        );*/
-    }/*  else {
-        println!("I am not in a tty. Please print according to test requirements!");
-    }*/
+    let mut ans_word=String::new();
+    let cli=Cli::parse();
+    let mut is_random_mode=cli.random;
+    let mut is_w=false;
+    match cli.word{
+        None=>{}
+        Some(r)=>{
+            is_w=true;
+            ans_word=r;
+        }
+    }
+    //let is_tty = atty::is(atty::Stream::Stdout);
+    let is_tty=false;
     let mut line = String::new();
     if is_tty {
         print!("{}", console::style("Your name: ").bold().red());
@@ -117,18 +152,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         io::stdin().read_line(&mut line)?;
         println!("Welcome to wordle, {}!", line.trim());
     }    
-    
-//get the guessing answer from standard input:(ALL INPUTS ARE IN CAPITAL LETTERS!)
-    let mut ans_word=String::new();
+    //if is random_mode
+    if is_random_mode{
+        let mut rng = rand::thread_rng();
+        let index_rand=rng.gen_range(0..builtin_words::FINAL.len());
+        ans_word=builtin_words::FINAL[index_rand].to_string();
+    }
+//If no -warguments are provided,get the guessing answer from standard input:(ALL OUTPUTS ARE IN CAPITAL LETTERS!)
+    else if (!is_w)&&(!is_random_mode){    
     if is_tty{
         print!("{}",console::style("please input the answer word:").bold().red());
         io::stdout().flush().unwrap();
-    }
+    }else{}
         line.clear();
         io::stdin()
         .read_line(&mut line)
         .expect("Failed to read line");
         ans_word=line.trim().to_string();
+    }else{}
     let mut letter_status=[0;26];
     let mut guesses:Vec<Vec<(char,Status)> >=Vec::new();
 //read from input:
@@ -172,7 +213,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         //output:
         if (is_tty==false)&&(flag==1){
-            print!("{} ",guess_word);
+            //print!("{} ",guess_word);
+            let ele=guesses.last().expect("guesses_last_not_found");
+                for it in ele{
+                    print!("{}",it.1.parse_to_char());
+                }print!(" ");
             for letter in &letter_status{
                 print!("{}",Status::new_from_value(*letter).parse_to_char());
             }println!("");
@@ -198,10 +243,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }else{
         if is_tty{
-            let str=format!("Sorry you failed,better luck next time!\nThe answer is {}",ans_word);
+            let str=format!("Sorry you failed,better luck next time!\nThe answer is {}",ans_word.to_uppercase());
             println!("{}",console::style(str).italic().magenta());
         }else{
-            println!("FAILED {}",ans_word);
+            println!("FAILED {}",ans_word.to_uppercase());
         }
     }
     // example: print arguments
