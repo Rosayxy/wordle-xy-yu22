@@ -1,14 +1,16 @@
 mod builtin_words;
+use builtin_words::ACCEPTABLE;
 use console;
 use rand::Rng;
-use std::io::{self, Write};
-use std::collections::HashMap;
+use std::io::{self, Write,Read};
+use std::collections::{HashMap,BTreeSet};
 use clap::Parser;
 use text_io::read;
 use std::cmp::Ordering;
 use std::error::Error;
 use std::{fmt,mem};
 use rand::prelude::*;
+use std::fs::File;
 enum Status{
     R,
     Y,
@@ -70,7 +72,24 @@ impl Status{
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             write!(f, "An error")
         }
-    }impl Error for ShuffleWhenNotRandomError{}    
+    }impl Error for ShuffleWhenNotRandomError{}
+    #[derive(Debug)]
+    struct DictionaryError{
+        error_type:i32,
+    }   
+    impl fmt::Display for DictionaryError {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "An error")
+        }
+    }    
+    impl Error for DictionaryError {}
+    impl DictionaryError{
+        fn new(error_type:i32)->DictionaryError{
+            return DictionaryError{
+                error_type
+            };
+        }
+    }    
 /// The main function for the Wordle game, implement your own logic here
 fn update_letter_status(ans_word:&str,guess_word:&str,letter_status:&mut [i32;26]){
     let mut guess_index=0;
@@ -147,22 +166,41 @@ fn create_guesses_ele(ans_word:&str,guess_word:&str)->Vec<(char,Status)>{
     }
     return vec_guesses_ele;
 }
-fn create_guesses_invalid(guess_word:&str)->Vec<(char,Status)>{
-    let mut count=0;
-    let mut v=Vec::new();
-    for c in guess_word.chars(){
-        v.push((c,Status::new_from_value(0)));
-    }v
+fn create_set_from_builtin(array:&[&str])->BTreeSet<String>{
+let mut t=BTreeSet::new();
+for i in array{
+    t.insert(i.to_string().to_uppercase());
+}return t;
 }
-
+fn create_set_from_file(file_name:String)->Result<BTreeSet<String>,DictionaryError>{
+    let mut t=BTreeSet::new();
+    let mut f = File::open(file_name).unwrap();
+    let mut buffer = String::new();
+    f.read_to_string(&mut buffer).unwrap();
+    //check file format
+    let mut file_index=0;
+    for i in buffer.chars(){
+        if (file_index%6==5)&&(i!='\n'){
+            return Err(DictionaryError { error_type:1 });
+        }
+    }
+    for word in buffer.split("\n"){
+        if t.contains(word){
+            return Err(DictionaryError { error_type:0 });
+        }else{
+            t.insert(word.to_string().to_uppercase());
+        }
+    }
+    return Ok(t);
+}
 #[derive(Parser)]
 struct Cli{
     #[arg(short,long)]
     word: Option<String>,
     #[arg(short,long)]
     random: bool,
-    #[arg(short)]
-    D:bool,
+    //#[arg(short)]
+    //D:bool,
     #[arg(long)]
     difficult:bool,
     #[arg(short)]
@@ -172,13 +210,17 @@ struct Cli{
     #[arg(short,long)]
     day:Option<i32>,
     #[arg(short,long)]
-    seed:Option<u64>
+    seed:Option<u64>,
+    #[arg(short,long)]
+    final_set:Option<String>,
+    #[arg(short,long)]
+    acceptable_set:Option<String>
 }
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut ans_word=String::new();
     let cli=Cli::parse();
     let mut is_random_mode=cli.random;
-    let is_difficult=(cli.D||cli.difficult);
+    let is_difficult=cli.difficult;
     let mut is_w=false;
     match cli.word{
         None=>{}
@@ -188,7 +230,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     //let is_tty = atty::is(atty::Stream::Stdout);
-    let is_tty=false;
+    let is_tty=true;
     //matches_overall_info
     let mut matches_count=0;
     let mut matches_win_count=0;
@@ -213,7 +255,67 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             io::stdout().flush().unwrap();
         }
             return Err(a_boxed_error);
-    }    
+    }
+    //create final and acceptable sets
+    let mut acceptable_set=BTreeSet::new();
+    let mut final_set=BTreeSet::new();
+    match cli.acceptable_set{
+        None=>{
+            acceptable_set=create_set_from_builtin(builtin_words::ACCEPTABLE);
+        }Some(str)=>{
+            let set=create_set_from_file(str);
+            match set{
+                Err(r)=>{
+                    let dictionary_error=&r;
+                    let error_type=dictionary_error.error_type;
+                    let a_boxed_error = Box::<dyn Error>::from(r);
+                    if is_tty{
+                        if error_type==0{
+                            println!("{}", console::style("You have redundant words in your acceptable dictionary").bold().red());                        
+                        }else{
+                            println!("{}", console::style("Your acceptable dictionary might has the wrong format").bold().red()); 
+                        }io::stdout().flush().unwrap();
+                    }
+                    return Err(a_boxed_error);
+                }Ok(r)=>{
+                    acceptable_set=r;
+                }
+            }
+        }
+    }match cli.final_set{
+        None=>{
+            final_set=create_set_from_builtin(builtin_words::FINAL);
+        }Some(str)=>{
+            let set=create_set_from_file(str);
+            match set{
+                Err(r)=>{
+                    let dictionary_error=&r;
+                    let t=dictionary_error.error_type;
+                    let a_boxed_error = Box::<dyn Error>::from(r);
+                    if is_tty{
+                        if t==0{
+                        println!("{}", console::style("You have redundant words in your final dictionary").bold().red());
+                    }else{
+                        println!("{}", console::style("Your final dictionary might has the wrong format").bold().red());
+                    }
+                        io::stdout().flush().unwrap();
+                    }
+                    return Err(a_boxed_error);
+                }Ok(r)=>{
+                    final_set=r;
+                }
+            }
+        }
+    }
+    //check if the two sets are subsets
+    if !(final_set.is_subset(&acceptable_set)){
+        let subset_error=DictionaryError::new(3);
+        if is_tty{
+            println!("{}", console::style("Your acceptable word set is not a subset of the final set").bold().red());
+            io::stdout().flush().unwrap();
+        }let a_boxed_error = Box::<dyn Error>::from(subset_error);
+        return Err(a_boxed_error);
+    }
     let mut line = String::new();
     if is_tty {
         print!("{}", console::style("Your name: ").bold().red());
@@ -236,8 +338,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         let mut rng=rand::rngs::StdRng::seed_from_u64(seed);
         let mut vec_final=Vec::new();
-        for i in builtin_words::FINAL{
-            vec_final.push(i.clone());
+        let mut final_set_clone=final_set.clone();
+        while !final_set_clone.is_empty(){
+            vec_final.push(final_set_clone.pop_first().unwrap());
         }
         vec_final.shuffle(&mut rng);
         /*let mut rng = rand::thread_rng();
@@ -266,6 +369,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .read_line(&mut line)
         .expect("Failed to read line");
         ans_word=line.trim().to_string();
+//check if ans_word is invalid
+    if !final_set.contains(&ans_word.to_uppercase()){
+        let answord_error=DictionaryError::new(4);
+        if is_tty{
+            println!("{}", console::style("Your answerword is not in our range").bold().red());
+            io::stdout().flush().unwrap();
+        }let a_boxed_error = Box::<dyn Error>::from(answord_error);
+        return Err(a_boxed_error);
+    }
     }else{}
     let mut letter_status=[0;26];
     let mut guesses:Vec<Vec<(char,Status)> >=Vec::new();
@@ -285,14 +397,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .expect("Failed to read line");
         let guess_word=line.trim().to_string();
         //check if invalid
-        let mut flag=0;
-        let guess_word_to_lower=guess_word.to_lowercase();
-        for it in builtin_words::ACCEPTABLE{
-            if *it==guess_word_to_lower{
-                flag=1;
-                break;
-            }else{}
-        }
+        let mut flag=acceptable_set.contains(&guess_word.to_uppercase()) as i32;
         //difficult mode:check if invalid
         if is_difficult&&(flag==1){
             if !guesses.is_empty(){
@@ -356,7 +461,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }else if is_tty==true{
             for ele in &guesses{
                 for it in ele{
-                    it.1.print_color(it.0);
+                    it.1.print_color((it.0 as u8+'A' as u8-'a' as u8) as char);
                 }println!("");
             }
         }
