@@ -2,6 +2,7 @@ mod builtin_words;
 use console;
 use rand::Rng;
 use std::io::{self, Write};
+use std::collections::HashMap;
 use clap::Parser;
 enum Status{
     R,
@@ -82,7 +83,7 @@ fn create_guesses_ele(ans_word:&str,guess_word:&str)->Vec<(char,Status)>{
             if c==cans{
                 if guess_index==ans_index{
                     vec_guesses_ele.push(((c,Status::new_from_value(3))));
-                    equal_flag=1;
+                    equal_flag=1;equal_not_pos_flag=0;
                     break;
                 }else{
                     equal_not_pos_flag=1;equal_flag=1;
@@ -95,13 +96,22 @@ fn create_guesses_ele(ans_word:&str,guess_word:&str)->Vec<(char,Status)>{
         }guess_index+=1;
     }
     //check if redundant
+    let mut count_times_guess=HashMap::new();
+    for word in guess_word.chars(){
+        let mut count_letter_times=count_times_guess.entry(word).or_insert(0);
+        *count_letter_times+=1;
+    }let mut count_times_ans=HashMap::new();
+    for word in ans_word.chars(){
+        let mut count_letter_times=count_times_ans.entry(word).or_insert(0);
+        *count_letter_times+=1;
+    }
     let mut redundant_vector:Vec<i32>=Vec::new();
     let mut index=0;
     for (c,s) in &vec_guesses_ele{
         if(s.parse_to_value()==2){
             let mut other_index=0;
             for (cc,ss) in &vec_guesses_ele{
-                if (cc==c)&&(other_index!=index){
+                if (cc==c)&&(other_index!=index)&&(count_times_ans.get(c)<count_times_guess.get(c)){
                     if ss.parse_to_value()==3{
                         redundant_vector.push(index);
                     }else if other_index<index{
@@ -130,11 +140,16 @@ struct Cli{
     word: Option<String>,
     #[arg(short,long)]
     random: bool,
+    #[arg(short)]
+    D:bool,
+    #[arg(long)]
+    difficult:bool,
 }
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut ans_word=String::new();
     let cli=Cli::parse();
     let mut is_random_mode=cli.random;
+    let is_difficult=(cli.D||cli.difficult);
     let mut is_w=false;
     match cli.word{
         None=>{}
@@ -175,7 +190,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 //read from input:
     let mut win_flag=0;
     let mut read_times=0;
-    while(read_times<6){
+    while (read_times<6){
         read_times+=1;
         if is_tty{
             let str=format!("your {} guess:(good luck)",read_times);
@@ -194,11 +209,42 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             if *it==guess_word_to_lower{
                 flag=1;
                 break;
+            }else{}
+        }
+        //difficult mode:check if invalid
+        if is_difficult&&(flag==1){
+            if !guesses.is_empty(){
+                let last=guesses.last().unwrap();
+                let mut index_now_word=0;
+                for (c,s) in last{
+                    if (s.parse_to_value()==3){
+                        if (*c!=guess_word.chars().nth(index_now_word).unwrap()){
+                            flag=0;break;
+                        }
+                    }else if s.parse_to_value()==2{
+                        let mut count_ans_s=0;
+                        for (cc,ss) in last{
+                            if (*cc==*c)&&(ss.parse_to_value()==2){
+                                count_ans_s+=1;
+                            }else{}
+                        }let mut count_guessword_s=0;
+                        let mut guess_word_index=0;
+                        for ch in guess_word.chars(){
+                            if (ch==*c)&&(ans_word.chars().nth(guess_word_index).unwrap()!=ch){
+                                count_guessword_s+=1;
+                            }guess_word_index+=1;
+                        }if(count_ans_s>count_guessword_s){
+                            flag=0;
+                            break;
+                        }
+                    }index_now_word+=1;
+                } 
             }
         }
         if (flag==0){
             //create element in guesses
-            guesses.push(create_guesses_invalid(&guess_word));
+            read_times-=1;
+            //guesses.push(create_guesses_invalid(&guess_word));
             if (is_tty){
                 println!("{}",console::style("sorry but your guess is INVALID,maybe try again?").italic().magenta());
                 io::stdout().flush().unwrap();
