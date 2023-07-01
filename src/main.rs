@@ -8,9 +8,10 @@ use clap::Parser;
 use text_io::read;
 use std::cmp::Ordering;
 use std::error::Error;
-use std::{fmt,mem};
+use std::{fmt,mem, clone};
 use rand::prelude::*;
 use std::fs::File;
+use serde::{Serialize,Deserialize};
 enum Status{
     R,
     Y,
@@ -193,6 +194,108 @@ fn create_set_from_file(file_name:String)->Result<BTreeSet<String>,DictionaryErr
     }
     return Ok(t);
 }
+#[derive(Serialize, Deserialize,Clone)]
+struct Round {
+    answer: Option<String>,
+    guesses:Option<Vec<String> >,
+}
+#[derive(Serialize,Deserialize)]
+struct State{
+    total_rounds:Option<i32>,
+    games:Option<Vec<Round> >,
+}
+#[derive(Debug)]
+struct ParseJsonError;    
+impl fmt::Display for ParseJsonError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "An error")
+    }
+}    
+impl Error for ParseJsonError {}
+fn assign_state(str:&str,previous_answord:&mut BTreeSet<String>,word_frequency:&mut HashMap<String,i32>,history:&mut Vec<Round>)->Result<(i32,i32),ParseJsonError>{
+    let mut total_rounds:i32=0;
+    let mut win_rounds=0;
+    let mut f=std::fs::File::open(str).unwrap();
+    let mut buffer = String::new();
+    f.read_to_string(&mut buffer).unwrap();
+    let parsed = serde_json::from_str(&buffer);
+    let mut state:State;
+    match parsed{
+        Err(_)=>{
+            return Err(ParseJsonError{});
+        }Ok(r)=>{
+            state=r;
+        }
+    }match state.total_rounds{
+        None=>{
+            match state.games{
+                None=>{
+                    return Ok((0,0));
+                }Some(r)=>{
+                    //history_restore
+                    total_rounds+=r.len() as i32;
+                    for i in r.clone(){
+                        history.push(i.clone());
+                        match i.answer{
+                            None=>{}
+                            Some(rr)=>{
+                                previous_answord.insert(rr.clone());
+                                match i.guesses.as_ref(){
+                                    None=>{}
+                                    Some(guesses_string)=>{
+                                        //if wins
+                                        if *guesses_string.last().unwrap()==rr.clone(){
+                                            win_rounds+=1;
+                                        }
+                                        for i in guesses_string{
+                                            let count_frequency=word_frequency.entry(i.to_string()).or_insert(0);
+                                            *count_frequency+=1;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }return Ok((total_rounds,win_rounds));
+                }
+            }
+        }
+        Some(total_round)=>{
+            match state.games{
+                None=>{
+                    return Ok((0,0));
+                }Some(r)=>{
+                    //history_restore
+                    if total_round!=(r.len() as i32){
+                        return Err(ParseJsonError{});
+                    }
+                    total_rounds+=r.len() as i32;
+                    for i in r.clone(){
+                        history.push(i.clone());
+                        match i.answer{
+                            None=>{}
+                            Some(rr)=>{
+                                previous_answord.insert(rr.clone());
+                                match i.guesses.as_ref(){
+                                    None=>{}
+                                    Some(guesses_string)=>{
+                                        //if wins
+                                        if *guesses_string.last().unwrap()==rr{
+                                            win_rounds+=1;
+                                        }
+                                        for i in guesses_string{
+                                            let count_frequency=word_frequency.entry(i.to_string()).or_insert(0);
+                                            *count_frequency+=1;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }return Ok((total_rounds,win_rounds));
+        }
+    }
+}
 #[derive(Parser)]
 struct Cli{
     #[arg(short,long)]
@@ -214,12 +317,15 @@ struct Cli{
     #[arg(short,long)]
     final_set:Option<String>,
     #[arg(short,long)]
-    acceptable_set:Option<String>
+    acceptable_set:Option<String>,
+    #[arg(short,long)]
+    state:Option<String>,
 }
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut ans_word=String::new();
     let cli=Cli::parse();
     let mut is_random_mode=cli.random;
+    let is_state=cli.state.is_some();
     let is_difficult=cli.difficult;
     let mut is_w=false;
     match cli.word{
@@ -236,6 +342,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut matches_win_count=0;
     let mut guess_attempts_sum=0;
     let mut word_frequency=HashMap::new();
+    let mut previous_answord=BTreeSet::new();
+    let mut history_record:Vec<Round>=Vec::new();
    // let randmode_index_history:Vec<i32>=Vec::new();
     let mut is_stats=(cli.stats||cli.t);
     //check if -w --day --seed valid
@@ -316,9 +424,31 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }let a_boxed_error = Box::<dyn Error>::from(subset_error);
         return Err(a_boxed_error);
     }
+    //parse json
+    let mut json_file_name=String::new();
+    match cli.state{
+        None=>{}
+        Some(r)=>{
+            json_file_name=r.clone();
+            let assign_state_return=assign_state(&r,&mut previous_answord,&mut word_frequency,&mut history_record);
+            match assign_state_return{
+                Err(error)=>{
+                    if is_tty{
+                        println!("{}", console::style("Your json file might has the wrong format").bold().red());
+                        io::stdout().flush().unwrap();
+                    }let parse_error=error;
+                    let a_boxed_error = Box::<dyn Error>::from(parse_error);
+                    return Err(a_boxed_error);
+                }Ok((add_total,add_win))=>{
+                    matches_count+=add_total;
+                    matches_win_count+=add_win;
+                }
+            }
+        }
+    }
     let mut line = String::new();
     if is_tty {
-        print!("{}", console::style("Your name: ").bold().red());
+        print!("{}", console::style("Your name: ").bold().magenta());
         io::stdout().flush().unwrap();
         io::stdin().read_line(&mut line)?;
         println!("Welcome to wordle, {}!", line.trim());
@@ -328,7 +458,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if is_random_mode{
         //if given --seed arguments
         let seed:u64=0xdeadbeef;
-        let mut day=1+matches_count;
+        let mut day=matches_count;
+        while previous_answord.contains(&ans_word.clone()){
+        day+=1;
         match cli.seed{
             Some(r)=>{let seed:u64=r;}
             None=>{}
@@ -342,21 +474,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         while !final_set_clone.is_empty(){
             vec_final.push(final_set_clone.pop_first().unwrap());
         }
-        vec_final.shuffle(&mut rng);
-        /*let mut rng = rand::thread_rng();
-        let mut index_rand=rng.gen_range(0..builtin_words::FINAL.len());
-        loop{
-        let mut regenerate=false;
-        for it in &randmode_index_history{
-            if *it==index_rand as i32{
-                regenerate=true;
-                break;
-            }
-        }if !regenerate{
-            break;
-        }index_rand=rng.gen_range(0..builtin_words::FINAL.len());
-    }*/
+        vec_final.shuffle(&mut rng);        
         ans_word=vec_final[(day-1) as usize].to_string();
+    }
     }
 //If no -w arguments are provided,get the guessing answer from standard input:(ALL OUTPUTS ARE IN CAPITAL LETTERS!)
     else if (!is_w)&&(!is_random_mode){    
@@ -381,6 +501,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }else{}
     let mut letter_status=[0;26];
     let mut guesses:Vec<Vec<(char,Status)> >=Vec::new();
+    let mut guesses_in_word:Vec<String>=Vec::new();
 //read from input:
     let mut win_flag=0;
     let mut read_times=0;
@@ -447,6 +568,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let key=guess_word.to_lowercase();
             let word_frequency_ref=word_frequency.entry(key).or_insert(0);
             *word_frequency_ref+=1;
+            guesses_in_word.push(guess_word.clone());
         }
         //output:
         if (is_tty==false)&&(flag==1){
@@ -492,6 +614,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         matches_win_count+=1;
         guess_attempts_sum+=read_times;
     }else{}
+    //if --stats,update json
+    if is_state{
+    let this_round_data=Round{
+        answer:Some(ans_word.clone()),
+        guesses:Some(guesses_in_word.clone()),
+    };
+    history_record.push(this_round_data);
+    let state_update=State{
+        total_rounds:Some(matches_count),
+        games:Some(history_record.clone()),
+    };
+    let write_json = serde_json::to_string(&state_update).unwrap();
+    let mut buffer=File::create(json_file_name.clone())?;
+    buffer.write(write_json.as_bytes())?;
+}
     //if -t,print stats
     if is_stats{
     //sort frequency
