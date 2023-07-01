@@ -4,6 +4,8 @@ use rand::Rng;
 use std::io::{self, Write};
 use std::collections::HashMap;
 use clap::Parser;
+use text_io::read;
+use std::cmp::Ordering;
 enum Status{
     R,
     Y,
@@ -134,6 +136,7 @@ fn create_guesses_invalid(guess_word:&str)->Vec<(char,Status)>{
         v.push((c,Status::new_from_value(0)));
     }v
 }
+
 #[derive(Parser)]
 struct Cli{
     #[arg(short,long)]
@@ -144,6 +147,14 @@ struct Cli{
     D:bool,
     #[arg(long)]
     difficult:bool,
+    #[arg(short)]
+    t:bool,
+    #[arg(long)]
+    stats:bool,
+    #[arg(short,long)]
+    day:Option<i32>,
+    #[arg(short,long)]
+    seed:Option<u64>
 }
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut ans_word=String::new();
@@ -158,6 +169,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             ans_word=r;
         }
     }
+    //matches_overall_info
+    let mut matches_count=0;
+    let mut matches_win_count=0;
+    let mut guess_attempts_sum=0;
+    let mut word_frequency=HashMap::new();
+    let randmode_index_history:Vec<i32>=Vec::new();
+    let mut is_stats=(cli.stats||cli.t);
     //let is_tty = atty::is(atty::Stream::Stdout);
     let is_tty=false;
     let mut line = String::new();
@@ -166,14 +184,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         io::stdout().flush().unwrap();
         io::stdin().read_line(&mut line)?;
         println!("Welcome to wordle, {}!", line.trim());
-    }    
+    }
+    loop{    
     //if is random_mode
     if is_random_mode{
         let mut rng = rand::thread_rng();
-        let index_rand=rng.gen_range(0..builtin_words::FINAL.len());
+        let mut index_rand=rng.gen_range(0..builtin_words::FINAL.len());
+        loop{
+        let mut regenerate=false;
+        for it in &randmode_index_history{
+            if *it==index_rand as i32{
+                regenerate=true;
+                break;
+            }
+        }if !regenerate{
+            break;
+        }index_rand=rng.gen_range(0..builtin_words::FINAL.len());
+    }
         ans_word=builtin_words::FINAL[index_rand].to_string();
     }
-//If no -warguments are provided,get the guessing answer from standard input:(ALL OUTPUTS ARE IN CAPITAL LETTERS!)
+//If no -w arguments are provided,get the guessing answer from standard input:(ALL OUTPUTS ARE IN CAPITAL LETTERS!)
     else if (!is_w)&&(!is_random_mode){    
     if is_tty{
         print!("{}",console::style("please input the answer word:").bold().red());
@@ -256,6 +286,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             update_letter_status(&ans_word, &guess_word, &mut letter_status);
             //create element in guesses
             guesses.push(create_guesses_ele(&ans_word, &guess_word));
+            //update word_frequency
+            let key=guess_word.to_lowercase();
+            let word_frequency_ref=word_frequency.entry(key).or_insert(0);
+            *word_frequency_ref+=1;
         }
         //output:
         if (is_tty==false)&&(flag==1){
@@ -294,14 +328,63 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }else{
             println!("FAILED {}",ans_word.to_uppercase());
         }
+    }    
+    //update data for this match
+    matches_count+=1;
+    if win_flag==1{
+        matches_win_count+=1;
+        guess_attempts_sum+=read_times;
+    }else{}
+    //if -t,print stats
+    if is_stats{
+    //sort frequency
+        let mut sorted_map = word_frequency.iter().collect::<Vec<_>>();
+        sorted_map.sort_by(|a,b| if (b.1<a.1)||(a.1==b.1)&&(a.0<b.0){Ordering::Less}else{Ordering::Greater});
+        let mut average_guess_time=0.0;
+        if matches_win_count==0{
+        }else{
+            average_guess_time=0.5*(guess_attempts_sum as f64)*2.0/(matches_win_count as f64);
+        }
+        if is_tty{
+        let str=format!("Here is your gaming stats:");
+        println!("{}",console::style(str).italic().blue());        
+        let str=format!("Success: {} Fail: {} Average guess times: {:.2}",matches_win_count,matches_count-matches_win_count,average_guess_time);
+        println!("{}",console::style(str).italic().blue());
+        let str=format!("Most frequently used words:");
+        println!("{}",console::style(str).italic().blue());
+        let mut sorted_map_index=0;
+        while (sorted_map_index<5)&&(sorted_map_index<sorted_map.len()){
+            let str=format!("{} {} ;",sorted_map[sorted_map_index].0,sorted_map[sorted_map_index].1);
+            print!("{}",console::style(str).italic().blue());
+        }println!("");
+    }else{
+        println!("{} {} {:.2}",matches_win_count,matches_count-matches_win_count,average_guess_time);
+        let mut sorted_map_index=0;
+        while (sorted_map_index<5)&&(sorted_map_index<sorted_map.len()){
+            print!("{} {}",sorted_map[sorted_map_index].0,sorted_map[sorted_map_index].1);
+        }println!("");
     }
-    // example: print arguments
-/*    print!("Command line arguments: ");
-    for arg in std::env::args() {
-        print!("{} ", arg);
+ }
+ //determine if break
+    if is_w{
+        break;
+    }else if is_tty{
+        let str=format!("Do you want to play another round?(y/n)(default is n)");
+            println!("{}",console::style(str).italic().magenta());
+        let input_break:char=read!();
+        match input_break{
+            'y'=>{}
+            _=>{break;}
+        }
+    }else{
+        let mut input_break=String::new();
+        io::stdin().read_line(&mut input_break).unwrap();
+        let input_break=input_break.trim().to_string();
+        match input_break.chars().nth(0).unwrap(){
+            'Y'=>{}
+            _=>{break;}
+        }
     }
-    println!("");*/
-    // TODO: parse the arguments in `args`
-
+}//end loop
     Ok(())
 }

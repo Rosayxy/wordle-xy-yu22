@@ -12,7 +12,7 @@ console = "0.15"
 colored = "2.0.0"
 clap = { version = "4.3.10", features = ["derive"] }
 rand ="0.8.5"
-
+text_io="0.1.10"
 [dev-dependencies]
 lazy_static = "1.4"
 assert-json-diff = "2.0"
