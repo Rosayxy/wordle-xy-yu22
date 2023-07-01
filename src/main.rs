@@ -6,6 +6,9 @@ use std::collections::HashMap;
 use clap::Parser;
 use text_io::read;
 use std::cmp::Ordering;
+use std::error::Error;
+use std::{fmt,mem};
+use rand::prelude::*;
 enum Status{
     R,
     Y,
@@ -52,7 +55,22 @@ impl Status{
         }io::stdout().flush().unwrap();
     }
 }
-
+//error_display
+#[derive(Debug)]
+    struct ArgumentConflictError;    
+    impl fmt::Display for ArgumentConflictError {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "An error")
+        }
+    }    
+    impl Error for ArgumentConflictError {}
+#[derive(Debug)]
+    struct ShuffleWhenNotRandomError;
+    impl fmt::Display for ShuffleWhenNotRandomError {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "An error")
+        }
+    }impl Error for ShuffleWhenNotRandomError{}    
 /// The main function for the Wordle game, implement your own logic here
 fn update_letter_status(ans_word:&str,guess_word:&str,letter_status:&mut [i32;26]){
     let mut guess_index=0;
@@ -169,15 +187,33 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             ans_word=r;
         }
     }
+    //let is_tty = atty::is(atty::Stream::Stdout);
+    let is_tty=false;
     //matches_overall_info
     let mut matches_count=0;
     let mut matches_win_count=0;
     let mut guess_attempts_sum=0;
     let mut word_frequency=HashMap::new();
-    let randmode_index_history:Vec<i32>=Vec::new();
+   // let randmode_index_history:Vec<i32>=Vec::new();
     let mut is_stats=(cli.stats||cli.t);
-    //let is_tty = atty::is(atty::Stream::Stdout);
-    let is_tty=false;
+    //check if -w --day --seed valid
+    if (is_random_mode)&&is_w{
+        let argument_conflict_error = ArgumentConflictError;
+        let a_boxed_error = Box::<dyn Error>::from(argument_conflict_error);
+        if is_tty{
+            print!("{}", console::style("The arguments -w/--word and -r/--random conflict").bold().red());
+            io::stdout().flush().unwrap();
+        }
+            return Err(a_boxed_error);
+    }else if (!is_random_mode)&&(cli.seed.is_some()||cli.day.is_some()){
+        let shuffle_error=ShuffleWhenNotRandomError;
+        let a_boxed_error = Box::<dyn Error>::from(shuffle_error);
+        if is_tty{
+            print!("{}", console::style("It is not possible to add -d/--day,-s/--seed arguments when not in random mode").bold().red());
+            io::stdout().flush().unwrap();
+        }
+            return Err(a_boxed_error);
+    }    
     let mut line = String::new();
     if is_tty {
         print!("{}", console::style("Your name: ").bold().red());
@@ -188,7 +224,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     loop{    
     //if is random_mode
     if is_random_mode{
-        let mut rng = rand::thread_rng();
+        //if given --seed arguments
+        let seed:u64=0xdeadbeef;
+        let mut day=1+matches_count;
+        match cli.seed{
+            Some(r)=>{let seed:u64=r;}
+            None=>{}
+        }match cli.day{
+            Some(d)=>{day=d;}
+            _=>{}
+        }
+        let mut rng=rand::rngs::StdRng::seed_from_u64(seed);
+        let mut vec_final=Vec::new();
+        for i in builtin_words::FINAL{
+            vec_final.push(i.clone());
+        }
+        vec_final.shuffle(&mut rng);
+        /*let mut rng = rand::thread_rng();
         let mut index_rand=rng.gen_range(0..builtin_words::FINAL.len());
         loop{
         let mut regenerate=false;
@@ -200,8 +252,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }if !regenerate{
             break;
         }index_rand=rng.gen_range(0..builtin_words::FINAL.len());
-    }
-        ans_word=builtin_words::FINAL[index_rand].to_string();
+    }*/
+        ans_word=vec_final[(day-1) as usize].to_string();
     }
 //If no -w arguments are provided,get the guessing answer from standard input:(ALL OUTPUTS ARE IN CAPITAL LETTERS!)
     else if (!is_w)&&(!is_random_mode){    
