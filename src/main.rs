@@ -238,13 +238,14 @@ fn assign_state(
     previous_answord: &mut BTreeSet<String>,
     word_frequency: &mut HashMap<String, i32>,
     history: &mut Vec<Round>,
-) -> Result<(i32, i32), ParseJsonError> {
+) -> Result<(i32, i32,usize), ParseJsonError> {
     let mut total_rounds: i32 = 0;
     let mut win_rounds = 0;
     let mut f = std::fs::File::open(str).unwrap();
     let mut buffer = String::new();
     f.read_to_string(&mut buffer).unwrap();
     let parsed = serde_json::from_str(&buffer);
+    let mut guess_attempts_sum=0;
     let mut state: State;
     match parsed {
         Err(_) => {
@@ -258,7 +259,7 @@ fn assign_state(
         None => {
             match state.games {
                 None => {
-                    return Ok((0, 0));
+                    return Ok((0, 0,0));
                 }
                 Some(r) => {
                     //history_restore
@@ -275,6 +276,7 @@ fn assign_state(
                                         //if wins
                                         if *guesses_string.last().unwrap() == rr.clone() {
                                             win_rounds += 1;
+                                            guess_attempts_sum+=guesses_string.len();
                                         }
                                         for i in guesses_string {
                                             let count_frequency =
@@ -286,14 +288,14 @@ fn assign_state(
                             }
                         }
                     }
-                    return Ok((total_rounds, win_rounds));
+                    return Ok((total_rounds, win_rounds,guess_attempts_sum));
                 }
             }
         }
         Some(total_round) => {
             match state.games {
                 None => {
-                    return Ok((0, 0));
+                    return Ok((0, 0,0));
                 }
                 Some(r) => {
                     //history_restore
@@ -313,6 +315,7 @@ fn assign_state(
                                         //if wins
                                         if *guesses_string.last().unwrap() == rr {
                                             win_rounds += 1;
+                                            guess_attempts_sum+=guesses_string.len();
                                         }
                                         for i in guesses_string {
                                             let count_frequency =
@@ -326,7 +329,7 @@ fn assign_state(
                     }
                 }
             }
-            return Ok((total_rounds, win_rounds));
+            return Ok((total_rounds, win_rounds,guess_attempts_sum));
         }
     }
 }
@@ -603,10 +606,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let a_boxed_error = Box::<dyn Error>::from(parse_error);
                     return Err(a_boxed_error);
                 }
-                Ok((add_total, add_win)) => {
+                Ok((add_total, add_win,add_guess_attempts_sum)) => {
                     matches_count += add_total;
                     matches_win_count += add_win;
                     previous_matches_count=add_total;
+                    guess_attempts_sum+=add_guess_attempts_sum;
                 }
             }
         }
