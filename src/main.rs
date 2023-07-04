@@ -108,7 +108,7 @@ fn update_letter_status(ans_word: &str, guess_word: &str, letter_status: &mut [i
                     letter_status[(cans as usize) - ('a' as usize)] = 2;
                 }
                 equal_flag = 1;
-                break;
+                //break;
             }
             ans_index += 1;
         }
@@ -389,7 +389,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     let is_tty = atty::is(atty::Stream::Stdout);
-    //let is_tty = true;
+    let is_tty = false;
     //matches_overall_info
     let mut matches_count = 0;
     let mut matches_win_count = 0;
@@ -621,19 +621,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         //if is random_mode
         if is_random_mode {
             //if given --seed arguments
-            let seed: u64 = 0xdeadbeef;
+            let mut seed: u64 = 0xdeadbeef;
             let mut day = matches_count;
-            while previous_answord.contains(&ans_word.clone()) {
-                day += 1;
-                match current_config.seed {
+            match current_config.seed {
                     Some(r) => {
-                        let seed: u64 = r;
+                        seed= r;
                     }
                     None => {}
                 }
                 match current_config.day {
                     Some(d) => {
-                        day = d;
+                        day = d+matches_count;
                     }
                     _ => {}
                 }
@@ -643,9 +641,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 while !final_set_clone.is_empty() {
                     vec_final.push(final_set_clone.pop_first().unwrap());
                 }
-                vec_final.shuffle(&mut rng);
-                ans_word = vec_final[(day - 1) as usize].to_string();
-            }
+                vec_final.shuffle(&mut rng); 
+                ans_word = vec_final[(day - 1) as usize].to_string().to_lowercase();             
+                while previous_answord.contains(&ans_word.clone()) {
+                day += 1;
+                ans_word = vec_final[(day - 1) as usize].to_string().to_lowercase();
+            } 
+            //println!("day,seed,answerword:{} {} {}",day,seed,ans_word);
+            day+=1;           
         }
         //If no -w arguments are provided,get the guessing answer from standard input:(ALL OUTPUTS ARE IN CAPITAL LETTERS!)
         else if (current_config.word.is_none()) && (!is_random_mode) {
@@ -705,15 +708,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let last = guesses.last().unwrap();
                     let mut index_now_word = 0;
                     for (c, s) in last {
+                        //check if all green letters are in the right positions
                         if s.parse_to_value() == 3 {
                             if *c != guess_word.chars().nth(index_now_word).unwrap() {
                                 flag = 0;
                                 break;
                             }
                         } else if s.parse_to_value() == 2 {
+                            //check if all yellow words appear times is above last time
+                            //count the letter in last guess word
                             let mut count_ans_s = 0;
                             for (cc, ss) in last {
-                                if (*cc == *c) && (ss.parse_to_value() == 2) {
+                                if (*cc == *c)&&(ss.parse_to_value()==2)  {
                                     count_ans_s += 1;
                                 } else {
                                 }
@@ -722,7 +728,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             let mut guess_word_index = 0;
                             for ch in guess_word.chars() {
                                 if (ch == *c)
-                                    && (ans_word.chars().nth(guess_word_index).unwrap() != ch)
                                 {
                                     count_guessword_s += 1;
                                 }
@@ -863,7 +868,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 while (sorted_map_index < 5) && (sorted_map_index < sorted_map.len()) {
                     let str = format!(
                         "{} {} ;",
-                        sorted_map[sorted_map_index].0, sorted_map[sorted_map_index].1
+                        sorted_map[sorted_map_index].0.to_uppercase(), sorted_map[sorted_map_index].1
                     );
                     print!("{}", console::style(str).italic().blue());
                 }
@@ -875,12 +880,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     matches_count - matches_win_count,
                     average_guess_time
                 );
-                let mut sorted_map_index = 0;
+                print!(
+                    "{} {}",
+                    sorted_map[0].0.to_uppercase(), sorted_map[0].1
+                );
+                let mut sorted_map_index = 1;
                 while (sorted_map_index < 5) && (sorted_map_index < sorted_map.len()) {
                     print!(
-                        "{} {}",
-                        sorted_map[sorted_map_index].0, sorted_map[sorted_map_index].1
-                    );
+                        " {} {}",
+                        sorted_map[sorted_map_index].0.to_uppercase(), sorted_map[sorted_map_index].1
+                    );sorted_map_index+=1;
                 }
                 println!("");
             }
