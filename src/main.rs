@@ -320,6 +320,36 @@ struct Cli{
     acceptable_set:Option<String>,
     #[arg(short,long)]
     state:Option<String>,
+    #[arg(short,long)]
+    config:Option<String>
+}
+#[derive(Serialize,Deserialize)]
+struct Config{
+    random:bool,
+    difficult:bool,
+    stats:bool,
+    day:Option<i32>,
+    seed:Option<u64>,
+    final_set:Option<String>,
+    acceptable_set:Option<String>,
+    state:Option<String>,
+    word:Option<String>
+}
+fn update_config<T:Clone>(file_config:Option<T>,cli_config:Option<T>)->Option<T>{
+    match cli_config{
+        None=>{
+            match file_config{
+                None=>{
+                    None
+                }Some(fconfig)=>{
+                    Some(fconfig.clone())                
+                }
+            }
+        }
+        Some(cli_config)=>{
+            Some(cli_config.clone())
+        }
+    }
 }
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut ans_word=String::new();
@@ -328,11 +358,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let is_state=cli.state.is_some();
     let is_difficult=cli.difficult;
     let mut is_w=false;
-    match cli.word{
+    match &cli.word{
         None=>{}
         Some(r)=>{
             is_w=true;
-            ans_word=r;
+            ans_word=r.clone();
         }
     }
     //let is_tty = atty::is(atty::Stream::Stdout);
@@ -364,14 +394,64 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
             return Err(a_boxed_error);
     }
+    //parse config
+    let mut current_config:Config;
+    match cli.config{
+        None=>{
+            current_config=Config{
+                random:cli.random,
+                difficult:cli.difficult,
+                stats:cli.stats,
+                //后面几个使用泛型编程
+                day:cli.day,
+                seed:cli.seed,
+                final_set:cli.final_set,
+                acceptable_set:cli.acceptable_set,
+                state:cli.state,
+                word:cli.word,
+            };
+        }
+        Some(conf)=>{
+            let mut f=std::fs::File::open(conf.clone()).unwrap();
+            let mut buffer = String::new();
+            f.read_to_string(&mut buffer).unwrap();
+            let parse=serde_json::from_str(&buffer);
+            let mut file_config:Config;
+            match parse{
+                Ok(r)=>{
+                    file_config=r;
+                }_=>{
+                    let error=ParseJsonError{};
+                    if is_tty{
+                        println!("{}", console::style("Your config json file might has the wrong format").bold().red());
+                        io::stdout().flush().unwrap();
+                    }let parse_error=error;
+                    let a_boxed_error = Box::<dyn Error>::from(parse_error);
+                    return Err(a_boxed_error);
+                }
+            }
+            current_config=Config{
+                random:cli.random,
+                difficult:cli.difficult,
+                stats:cli.stats,
+                //后面几个使用泛型编程
+                day:update_config(file_config.day, cli.day),
+                seed:update_config(file_config.seed, cli.seed),
+                final_set:update_config(file_config.final_set, cli.final_set),
+                acceptable_set:update_config(file_config.acceptable_set, cli.acceptable_set),
+                state:update_config(file_config.state, cli.state),
+                word:update_config(file_config.word, cli.word),
+            };
+        }
+    }
     //create final and acceptable sets
     let mut acceptable_set=BTreeSet::new();
     let mut final_set=BTreeSet::new();
-    match cli.acceptable_set{
+    match &current_config.acceptable_set{
         None=>{
             acceptable_set=create_set_from_builtin(builtin_words::ACCEPTABLE);
         }Some(str)=>{
-            let set=create_set_from_file(str);
+            let set=create_set_from_file(str.clone());
             match set{
                 Err(r)=>{
                     let dictionary_error=&r;
@@ -390,11 +470,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
         }
-    }match cli.final_set{
+    }match &current_config.final_set{
         None=>{
             final_set=create_set_from_builtin(builtin_words::FINAL);
         }Some(str)=>{
-            let set=create_set_from_file(str);
+            let set=create_set_from_file(str.clone());
             match set{
                 Err(r)=>{
                     let dictionary_error=&r;
@@ -426,7 +506,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     //parse json
     let mut json_file_name=String::new();
-    match cli.state{
+    match &current_config.state{
         None=>{}
         Some(r)=>{
             json_file_name=r.clone();
@@ -446,6 +526,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     }
+    //game starts    
     let mut line = String::new();
     if is_tty {
         print!("{}", console::style("Your name: ").bold().magenta());
@@ -461,10 +542,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut day=matches_count;
         while previous_answord.contains(&ans_word.clone()){
         day+=1;
-        match cli.seed{
+        match current_config.seed{
             Some(r)=>{let seed:u64=r;}
             None=>{}
-        }match cli.day{
+        }match current_config.day{
             Some(d)=>{day=d;}
             _=>{}
         }
@@ -479,7 +560,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     }
 //If no -w arguments are provided,get the guessing answer from standard input:(ALL OUTPUTS ARE IN CAPITAL LETTERS!)
-    else if (!is_w)&&(!is_random_mode){    
+    else if (current_config.word.is_none())&&(!is_random_mode){    
     if is_tty{
         print!("{}",console::style("please input the answer word:").bold().red());
         io::stdout().flush().unwrap();
@@ -525,8 +606,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let last=guesses.last().unwrap();
                 let mut index_now_word=0;
                 for (c,s) in last{
-                    if (s.parse_to_value()==3){
-                        if (*c!=guess_word.chars().nth(index_now_word).unwrap()){
+                    if s.parse_to_value()==3{
+                        if *c!=guess_word.chars().nth(index_now_word).unwrap(){
                             flag=0;break;
                         }
                     }else if s.parse_to_value()==2{
@@ -541,7 +622,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             if (ch==*c)&&(ans_word.chars().nth(guess_word_index).unwrap()!=ch){
                                 count_guessword_s+=1;
                             }guess_word_index+=1;
-                        }if(count_ans_s>count_guessword_s){
+                        }if count_ans_s>count_guessword_s{
                             flag=0;
                             break;
                         }
