@@ -278,7 +278,7 @@ fn assign_state(
                                         }
                                         for i in guesses_string {
                                             let count_frequency =
-                                                word_frequency.entry(i.to_string()).or_insert(0);
+                                                word_frequency.entry(i.to_string().to_lowercase()).or_insert(0);
                                             *count_frequency += 1;
                                         }
                                     }
@@ -316,7 +316,7 @@ fn assign_state(
                                         }
                                         for i in guesses_string {
                                             let count_frequency =
-                                                word_frequency.entry(i.to_string()).or_insert(0);
+                                                word_frequency.entry(i.to_string().to_lowercase()).or_insert(0);
                                             *count_frequency += 1;
                                         }
                                     }
@@ -375,19 +375,7 @@ fn update_config<T: Clone>(file_config: Option<T>, cli_config: Option<T>) -> Opt
     }
 }
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut ans_word = String::new();
     let cli = Cli::parse();
-    let mut is_random_mode = cli.random;
-    let is_state = cli.state.is_some();
-    let is_difficult = cli.difficult;
-    let mut is_w = false;
-    match &cli.word {
-        None => {}
-        Some(r) => {
-            is_w = true;
-            ans_word = r.clone();
-        }
-    }
     let is_tty = atty::is(atty::Stream::Stdout);
     let is_tty = false;
     //matches_overall_info
@@ -397,31 +385,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut word_frequency = HashMap::new();
     let mut previous_answord = BTreeSet::new();
     let mut history_record: Vec<Round> = Vec::new();
+    let mut previous_matches_count=0;
     // let randmode_index_history:Vec<i32>=Vec::new();
-    let mut is_stats = cli.stats;
+    //let mut is_stats = cli.stats;
     //check if -w --day --seed valid
-    if (is_random_mode) && is_w {
-        let argument_conflict_error = ArgumentConflictError;
-        let a_boxed_error = Box::<dyn Error>::from(argument_conflict_error);
-        if is_tty {
-            print!(
-                "{}",
-                console::style("The arguments -w/--word and -r/--random conflict")
-                    .bold()
-                    .red()
-            );
-            io::stdout().flush().unwrap();
-        }
-        return Err(a_boxed_error);
-    } else if (!is_random_mode) && (cli.seed.is_some() || cli.day.is_some()) {
-        let shuffle_error = ShuffleWhenNotRandomError;
-        let a_boxed_error = Box::<dyn Error>::from(shuffle_error);
-        if is_tty {
-            print!("{}", console::style("It is not possible to add -d/--day,-s/--seed arguments when not in random mode").bold().red());
-            io::stdout().flush().unwrap();
-        }
-        return Err(a_boxed_error);
-    }
+   
     //parse config
     let mut current_config: Config;
     match cli.config {
@@ -466,9 +434,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
             current_config = Config {
-                random: cli.random,
-                difficult: cli.difficult,
-                stats: cli.stats,
+                random: cli.random||file_config.random,
+                difficult: cli.difficult||file_config.difficult,
+                stats: cli.stats||file_config.stats,
                 //后面几个使用泛型编程
                 day: update_config(file_config.day, cli.day),
                 seed: update_config(file_config.seed, cli.seed),
@@ -479,6 +447,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             };
         }
     }
+    //define flags
+    let is_random_mode=current_config.random;
+    let is_difficult=current_config.difficult;
+    let is_state=current_config.state.is_some();
+    let is_stats=current_config.stats;
+    let is_w=current_config.word.is_some();    
+    let mut ans_word=match &current_config.word{
+        None=>String::new(),
+        Some(s)=>s.clone()
+    };
     //create final and acceptable sets
     let mut acceptable_set = BTreeSet::new();
     let mut final_set = BTreeSet::new();
@@ -575,6 +553,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let a_boxed_error = Box::<dyn Error>::from(subset_error);
         return Err(a_boxed_error);
     }
+    //judge tandom_mode and word conflict
+     if (is_random_mode) && is_w {
+        let argument_conflict_error = ArgumentConflictError;
+        let a_boxed_error = Box::<dyn Error>::from(argument_conflict_error);
+        if is_tty {
+            print!(
+                "{}",
+                console::style("The arguments -w/--word and -r/--random conflict")
+                    .bold()
+                    .red()
+            );
+            io::stdout().flush().unwrap();
+        }
+        return Err(a_boxed_error);
+    } else if (!is_random_mode) && (current_config.seed.is_some() || current_config.day.is_some()) {
+        let shuffle_error = ShuffleWhenNotRandomError;
+        let a_boxed_error = Box::<dyn Error>::from(shuffle_error);
+        if is_tty {
+            print!("{}", console::style("It is not possible to add -d/--day,-s/--seed arguments when not in random mode").bold().red());
+            io::stdout().flush().unwrap();
+        }
+        return Err(a_boxed_error);
+    }
     //parse json
     let mut json_file_name = String::new();
     match &current_config.state {
@@ -605,6 +606,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Ok((add_total, add_win)) => {
                     matches_count += add_total;
                     matches_win_count += add_win;
+                    previous_matches_count=add_total;
                 }
             }
         }
@@ -622,7 +624,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if is_random_mode {
             //if given --seed arguments
             let mut seed: u64 = 0xdeadbeef;
-            let mut day = matches_count;
+            let mut day = matches_count-previous_matches_count;
             match current_config.seed {
                     Some(r) => {
                         seed= r;
@@ -631,7 +633,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 match current_config.day {
                     Some(d) => {
-                        day = d+matches_count;
+                        day = d+matches_count-previous_matches_count;
                     }
                     _ => {}
                 }
@@ -766,7 +768,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let key = guess_word.to_lowercase();
                 let word_frequency_ref = word_frequency.entry(key).or_insert(0);
                 *word_frequency_ref += 1;
-                guesses_in_word.push(guess_word.clone());
+                guesses_in_word.push(guess_word.clone().to_uppercase());
             }
             //output:
             if (is_tty == false) && (flag == 1) {
@@ -823,9 +825,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         //if --stats,update json
         if is_state {
             let this_round_data = Round {
-                answer: Some(ans_word.clone()),
+                answer: Some(ans_word.clone().to_uppercase()),
                 guesses: Some(guesses_in_word.clone()),
-            };
+                    };
             history_record.push(this_round_data);
             let state_update = State {
                 total_rounds: Some(matches_count),
