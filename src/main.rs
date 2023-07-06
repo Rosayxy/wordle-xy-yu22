@@ -408,7 +408,7 @@ fn update_config<T: Clone>(file_config: Option<T>, cli_config: Option<T>) -> Opt
     }
 }
 
-//generate random seeds
+//generate random mode answord
 #[inline]
 fn rand_seed_generate(
     seed: u64,
@@ -428,7 +428,7 @@ fn rand_seed_generate(
         .to_lowercase();
     while previous_answord.contains(&ans_word.clone()) {
         day += 1;
-        ans_word = vec_final[(day - 1) as usize].to_string().to_lowercase();
+        ans_word = vec_final[((day - 1) as usize)%2315].to_string().to_lowercase();
     }
     ans_word
 }
@@ -839,6 +839,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             guesses: None,
         };
         if cli.gui {
+            //Adapted from https://github.com/fltk-rs/fltk-rs/blob/master/fltk/examples/calculator.rs fro Alhammed Alyousef on 2023-7-4
+            //A function which does the gui mode using the fltk
             let (mut app, mut wind, mut but_vec, mut op_vec, mut table_vec, mut out) =
                 gui::gui_init();
             let mut col_index = 0;

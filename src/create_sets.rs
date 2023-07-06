@@ -28,7 +28,7 @@ pub fn dictionary_error_output(r: DictionaryError, is_tty: bool) -> Box<dyn std:
         if error_type == 0 {
             println!(
                 "{}",
-                console::style("You have redundant words in your acceptable dictionary")
+                console::style("You have redundant words in your dictionary")
                     .bold()
                     .red()
             );
@@ -78,7 +78,7 @@ pub fn create_set_from_file(file_name: String) -> Result<BTreeSet<String>, Dicti
         }
     }
     for word in buffer.split("\n") {
-        if t.contains(word) {
+        if t.contains(&word.to_uppercase()) {
             return Err(DictionaryError { error_type: 0 });
         } else {
             t.insert(word.to_string().to_uppercase());
