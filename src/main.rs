@@ -211,6 +211,14 @@ impl fmt::Display for ParseJsonError {
     }
 }
 impl Error for ParseJsonError {}
+#[derive(Debug)]
+struct DayInvalidError;
+impl fmt::Display for DayInvalidError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "An error")
+    }
+}
+impl Error for DayInvalidError {}
 fn json_error_output(error: ParseJsonError, is_tty: bool) -> Box<dyn std::error::Error> {
     if is_tty {
         println!(
@@ -423,12 +431,12 @@ fn rand_seed_generate(
         vec_final.push(final_set_clone.pop_first().unwrap());
     }
     vec_final.shuffle(&mut rng);
-    let mut ans_word = vec_final[((day - 1) as usize) % 2315]
+    let mut ans_word = vec_final[((day - 1) as usize) % final_set.len()]
         .to_string()
         .to_lowercase();
     while previous_answord.contains(&ans_word.clone()) {
         day += 1;
-        ans_word = vec_final[((day - 1) as usize)%2315].to_string().to_lowercase();
+        ans_word = vec_final[((day - 1) as usize)%final_set.len()].to_string().to_lowercase();
     }
     ans_word
 }
@@ -811,7 +819,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             match current_config.day {
                 Some(d) => {
                     day = d + matches_count - previous_matches_count;
-                }
+                    if day<0||day as usize>=final_set.len(){
+                        let parse_error = DayInvalidError{};
+                        let a_boxed_error = Box::<dyn Error>::from(parse_error);
+                        return Err(a_boxed_error);
+                    }
+                           }
                 _ => {}
             }
             ans_word = rand_seed_generate(seed, day, &mut previous_answord, &mut final_set);
