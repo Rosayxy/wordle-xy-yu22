@@ -32,17 +32,12 @@ impl Status {
             _ => Status::X,
         }
     }
-    pub fn set_status_color(&self)->fltk::enums::Color{
+    pub fn set_status_color(&self) -> fltk::enums::Color {
         match &self {
-            Status::R => {
-                fltk::enums::Color::Red},
-            Status::Y => {
-                
-                fltk::enums::Color::Yellow},
-            Status::G => {
-                fltk::enums::Color::Green},
-            Status::X => {
-                fltk::enums::Color::Light3}
+            Status::R => fltk::enums::Color::Red,
+            Status::Y => fltk::enums::Color::Yellow,
+            Status::G => fltk::enums::Color::Green,
+            Status::X => fltk::enums::Color::Light3,
         }
     }
     pub fn print_color(&self, ch: char) {

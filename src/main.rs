@@ -30,8 +30,9 @@ use text_io::read;
 mod status;
 use status::Status;
 mod create_sets;
-use create_sets::{create_set_from_builtin,create_set_from_file,sets_create,DictionaryError};
+use create_sets::{create_set_from_builtin, create_set_from_file, sets_create, DictionaryError};
 
+//when the arguments in the commandline conflicts,this error will be thrown
 #[derive(Debug)]
 struct ArgumentConflictError;
 impl fmt::Display for ArgumentConflictError {
@@ -54,6 +55,7 @@ fn argument_conflict_error_output(is_tty: bool) -> Box<dyn std::error::Error> {
     }
     a_boxed_error
 }
+//when you are not in random mode but you provide seed,this error will be thrown
 #[derive(Debug)]
 struct ShuffleWhenNotRandomError;
 impl fmt::Display for ShuffleWhenNotRandomError {
@@ -78,6 +80,7 @@ fn shuffle_error_output(is_tty: bool) -> Box<dyn std::error::Error> {
     }
     a_boxed_error
 }
+//read in your guess_word
 #[inline(always)]
 fn read_guessword(is_tty: bool, read_times: usize) -> String {
     if is_tty {
@@ -92,7 +95,7 @@ fn read_guessword(is_tty: bool, read_times: usize) -> String {
     let guess_word = line.trim().to_string();
     guess_word
 }
-/// The main function for the Wordle game, implement your own logic here
+//analyze the letter status
 #[inline(always)]
 fn update_letter_status(ans_word: &str, guess_word: &str, letter_status: &mut [i32; 26]) {
     let mut guess_index = 0;
@@ -117,6 +120,7 @@ fn update_letter_status(ans_word: &str, guess_word: &str, letter_status: &mut [i
         }
     }
 }
+//creates a vector in which each element is the letter of the word and the corresponding status
 #[inline(always)]
 fn create_guesses_ele(ans_word: &str, guess_word: &str) -> Vec<(char, Status)> {
     let mut vec_guesses_ele = Vec::new();
@@ -198,6 +202,7 @@ struct State {
     total_rounds: Option<i32>,
     games: Option<Vec<Round>>,
 }
+//when your input json has the wrong format,throws this error
 #[derive(Debug)]
 struct ParseJsonError;
 impl fmt::Display for ParseJsonError {
@@ -220,7 +225,8 @@ fn json_error_output(error: ParseJsonError, is_tty: bool) -> Box<dyn std::error:
     let a_boxed_error = Box::<dyn Error>::from(parse_error);
     a_boxed_error
 }
-#[inline(always)]
+//from the json file,update the answords,word frequencies and guess histories
+#[inline]
 fn assign_state(
     str: &str,
     previous_answord: &mut BTreeSet<String>,
@@ -252,7 +258,7 @@ fn assign_state(
                 Some(r) => {
                     //history_restore
                     total_rounds += r.len() as i32;
-                    for i in &r{
+                    for i in &r {
                         history.push(i.clone());
                         match &i.answer {
                             None => {}
@@ -323,7 +329,7 @@ fn assign_state(
         }
     }
 }
-
+//commandline options
 #[derive(Parser)]
 struct Cli {
     #[arg(short, long)]
@@ -348,6 +354,8 @@ struct Cli {
     config: Option<String>,
     #[arg(short, long)]
     gui: bool,
+    #[arg(long)]
+    solver: Option<usize>,
 }
 #[derive(Serialize, Deserialize)]
 struct Config {
@@ -361,7 +369,7 @@ struct Config {
     state: Option<String>,
     word: Option<String>,
 }
-
+//parse the config file
 fn parse_file_config(conf: String, is_tty: bool) -> Result<Config, ParseJsonError> {
     let mut f = std::fs::File::open(conf.clone()).unwrap();
     let mut buffer = String::new();
@@ -389,7 +397,7 @@ fn parse_file_config(conf: String, is_tty: bool) -> Result<Config, ParseJsonErro
         }
     }
 }
-
+//create current config
 fn update_config<T: Clone>(file_config: Option<T>, cli_config: Option<T>) -> Option<T> {
     match cli_config {
         None => match file_config {
@@ -400,16 +408,8 @@ fn update_config<T: Clone>(file_config: Option<T>, cli_config: Option<T>) -> Opt
     }
 }
 
-fn print_welcome_message(is_tty: bool) {
-    if is_tty {
-        let mut line = String::new();
-        print!("{}", console::style("Your name: ").bold().magenta());
-        io::stdout().flush().unwrap();
-        io::stdin().read_line(&mut line).unwrap();
-        println!("Welcome to wordle, {}!", line.trim());
-    }
-}
-#[inline(always)]
+//generate random seeds
+#[inline]
 fn rand_seed_generate(
     seed: u64,
     mut day: i32,
@@ -432,6 +432,7 @@ fn rand_seed_generate(
     }
     ans_word
 }
+//input answord
 #[inline(always)]
 fn stdin_answord(is_tty: bool) -> String {
     if is_tty {
@@ -449,7 +450,7 @@ fn stdin_answord(is_tty: bool) -> String {
     let mut ans_word = line.trim().to_string();
     ans_word
 }
-
+//output if the answord is invalid
 fn ans_word_invalid_output(is_tty: bool) -> Box<dyn std::error::Error> {
     let answord_error = DictionaryError::new(4);
     if is_tty {
@@ -464,6 +465,7 @@ fn ans_word_invalid_output(is_tty: bool) -> Box<dyn std::error::Error> {
     let a_boxed_error = Box::<dyn Error>::from(answord_error);
     a_boxed_error
 }
+//check if your input is valid
 #[inline(always)]
 fn invalid_check(
     acceptable_set: &BTreeSet<String>,
@@ -513,6 +515,7 @@ fn invalid_check(
     }
     flag
 }
+//if your guess is invalid,output this
 #[inline]
 fn flag_invalid_print(is_tty: bool) {
     if (is_tty) {
@@ -527,7 +530,8 @@ fn flag_invalid_print(is_tty: bool) {
         println!("INVALID");
     }
 }
-#[inline(always)]
+//output the letter status
+#[inline]
 fn status_output(
     is_tty: bool,
     flag: bool,
@@ -552,9 +556,17 @@ fn status_output(
             }
             println!("");
         }
+        let mut letter_index = 0;
+        for letter in letter_status {
+            let t = Status::new_from_value(*letter);
+            t.print_color((letter_index as u8 + 'A' as u8) as char);
+            letter_index += 1;
+        }
+        println!("");
     }
 }
-#[inline(always)]
+//output your final result
+#[inline]
 fn print_final_result(is_tty: bool, win_flag: i32, ans_word: &str, read_times: usize) {
     if win_flag == 1 {
         if is_tty {
@@ -575,14 +587,15 @@ fn print_final_result(is_tty: bool, win_flag: i32, ans_word: &str, read_times: u
         }
     }
 }
-#[inline(always)]
+//print the statistic of the matches
 fn stats_print(
     word_frequency: &mut HashMap<String, i32>,
     matches_win_count: i32,
     guess_attempts_sum: usize,
     matches_count: i32,
     is_tty: bool,
-) {
+    is_gui: bool,
+) -> String {
     let mut sorted_map = word_frequency.iter().collect::<Vec<_>>();
     sorted_map.sort_by(|a, b| {
         if (b.1 < a.1) || (a.1 == b.1) && (a.0 < b.0) {
@@ -596,28 +609,47 @@ fn stats_print(
     } else {
         average_guess_time = 0.5 * (guess_attempts_sum as f64) * 2.0 / (matches_win_count as f64);
     }
-    if is_tty {
-        let str = format!("Here is your gaming stats:");
-        println!("{}", console::style(str).italic().blue());
-        let str = format!(
+    let mut str = format!("Here is your gaming stats:");
+    if is_tty || is_gui {
+        if !is_gui {
+            println!("{}", console::style(str.clone()).italic().blue());
+        }
+        let str1 = format!(
             "Success: {} Fail: {} Average guess times: {:.2}",
             matches_win_count,
             matches_count - matches_win_count,
             average_guess_time
         );
-        println!("{}", console::style(str).italic().blue());
-        let str = format!("Most frequently used words:");
-        println!("{}", console::style(str).italic().blue());
+        if !is_gui {
+            println!("{}", console::style(str1).italic().blue());
+        } else {
+            str.push('\n');
+            str.push_str(&str1);
+        }
+        let str2 = format!("Most frequently used words:");
+        if !is_gui {
+            println!("{}", console::style(str2).italic().blue());
+        } else {
+            str.push('\n');
+            str.push_str(&str2);
+        }
         let mut sorted_map_index = 0;
         while (sorted_map_index < 5) && (sorted_map_index < sorted_map.len()) {
-            let str = format!(
+            let str3 = format!(
                 "{} {} ;",
                 sorted_map[sorted_map_index].0.to_uppercase(),
                 sorted_map[sorted_map_index].1
             );
-            print!("{}", console::style(str).italic().blue());
+            sorted_map_index += 1;
+            if !is_gui {
+                print!("{}", console::style(str3).italic().blue());
+            } else {
+                str.push_str(&str3);
+            }
         }
-        println!("");
+        if !is_gui {
+            println!("");
+        }
     } else {
         println!(
             "{} {} {:.2}",
@@ -637,16 +669,15 @@ fn stats_print(
         }
         println!("");
     }
+    if is_gui == false {
+        return String::from("");
+    } else {
+        return str;
+    }
 }
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
-    //let mut app: app::App;
-    //let mut wind: DoubleWindow;
-    //let mut but_vec: Vec<MyButton>;
-    //let mut op_vec: Vec<MyButton>;
-    //let mut table_vec: Vec<Vec<MyButton>>;
     let is_tty = atty::is(atty::Stream::Stdout);
-    let is_tty = false;
     //matches_overall_info
     let mut matches_count = 0;
     let mut matches_win_count = 0;
@@ -655,9 +686,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut previous_answord = BTreeSet::new();
     let mut history_record: Vec<Round> = Vec::new();
     let mut previous_matches_count = 0;
-    // let randmode_index_history:Vec<i32>=Vec::new();
-    //let mut is_stats = cli.stats;
-    //check if -w --day --seed valid
 
     //parse config
     let mut current_config: Config;
@@ -667,7 +695,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 random: cli.random,
                 difficult: cli.difficult,
                 stats: cli.stats,
-                //后面几个使用泛型编程
                 day: cli.day,
                 seed: cli.seed,
                 final_set: cli.final_set,
@@ -792,7 +819,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             day += 1;
         }
         //If no -w arguments are provided,get the guessing answerword from standard input:(ALL OUTPUTS ARE IN CAPITAL LETTERS!)
-        else if (current_config.word.is_none()) && (!is_random_mode) {
+        else if (current_config.word.is_none()) && (!is_random_mode) && (!cli.gui) {
             ans_word = stdin_answord(is_tty);
             //check if ans_word is invalid
             if !final_set.contains(&ans_word.to_uppercase()) {
@@ -806,8 +833,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         //read from input:
         let mut win_flag = 0;
         let mut read_times = 1;
-        if false {
-            let (mut app, mut wind, mut but_vec, mut op_vec, mut table_vec) = gui::gui_init();
+        let mut gui_continue_flag = false;
+        let mut gui_round = Round {
+            answer: None,
+            guesses: None,
+        };
+        if cli.gui {
+            let (mut app, mut wind, mut but_vec, mut op_vec, mut table_vec, mut out) =
+                gui::gui_init();
             let mut col_index = 0;
             let mut str = String::new();
             let (s, r) = app::channel::<Message>();
@@ -819,10 +852,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let op = match but.label().as_str() {
                     "ENTER" => Ops::Enter,
                     "@<-" => Ops::Backspace,
+                    "Play" => Ops::Play,
+                    "Quit" => Ops::Quit,
                     _ => Ops::None,
                 };
                 but.emit(s.clone(), Message::Op(op));
             }
+            let mut is_ansinput = {
+                if ans_word.len() < 2 {
+                    true
+                } else {
+                    false
+                }
+            };
+            if ans_word.len() < 2 {
+                out.set_value("please input your answord");
+            }
+            let mut end_game_flag = false;
             while app.wait() {
                 if let Some(i) = r.recv() {
                     match i {
@@ -840,22 +886,38 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 Ops::Backspace => {
                                     if col_index > 0 {
                                         col_index -= 1;
-                                        table_vec[read_times as usize][col_index as usize]
+                                        table_vec[read_times - 1 as usize][col_index as usize]
                                             .set_label("");
-                                        str.pop().unwrap();
                                         app.redraw();
+                                        str.pop().unwrap();
                                     }
                                 }
                                 Ops::Enter => {
                                     let guess_word = str.to_lowercase();
-                                    println!("{}", guess_word);
+                                    if is_ansinput {
+                                        ans_word = guess_word.clone();
+                                        if !final_set.contains(&ans_word.to_uppercase()) {
+                                            return Err(ans_word_invalid_output(is_tty));
+                                        }
+                                        is_ansinput = false;
+                                        let mut col_index = 0;
+                                        while col_index < 5 {
+                                            table_vec[read_times as usize][col_index as usize]
+                                                .set_label("");
+                                            col_index += 1;
+                                        }
+                                        app.redraw();
+                                        col_index = 0;
+                                        str.clear();
+                                        continue;
+                                    }
                                     let flag = invalid_check(
                                         &acceptable_set,
                                         guess_word.clone(),
                                         is_difficult,
                                         &mut guesses,
                                     );
-                                    if (flag == false) {
+                                    if flag == false {
                                         //create element in guesses
                                         read_times -= 1;
                                         //flag_invalid_print(is_tty);
@@ -876,8 +938,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         *word_frequency_ref += 1;
                                         guesses_in_word.push(guess_word.clone().to_uppercase());
                                         let guess_last = guesses.last().unwrap().clone();
-                                        // println!("before print letter status");
-                                        //gui::print_letter_status(read_times-1, guess_last,&mut table_vec);
                                         let mut col_index = 0;
                                         while col_index < 5 {
                                             table_vec[read_times - 1 as usize][col_index]
@@ -886,6 +946,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                 );
                                             col_index += 1;
                                         }
+                                        app.redraw();
                                         let mut keyboard = 0;
                                         while keyboard < 26 {
                                             but_vec[keyboard].set_color(
@@ -895,44 +956,103 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             keyboard += 1;
                                         }
                                         app.redraw();
-                                        //println!("after print letter status");
                                     }
-                                    if guess_word == ans_word {
+
+                                    if guess_word.to_lowercase() == ans_word.to_lowercase() {
                                         win_flag = 1;
-                                        //app.redraw();
-                                        let callback = move |_handle| {
-                                            app::quit();
-                                        };
-                                        let _handle = app::add_timeout3(0.1, callback);
-                                        break;
+                                        end_game_flag = true;
+                                        let mut str =
+                                            format! {"Success! guess_times:{}",read_times};
+                                        matches_count += 1;
+                                        matches_win_count += 1;
+                                        guess_attempts_sum += read_times;
+                                        if is_stats {
+                                            str.push_str(&stats_print(
+                                                &mut word_frequency,
+                                                matches_win_count,
+                                                guess_attempts_sum,
+                                                matches_count,
+                                                is_tty,
+                                                true,
+                                            ));
+                                        }
+                                        out.set_text_size(8);
+                                        out.set_value(&str);
+                                        app.redraw();
                                     }
                                     read_times += 1;
                                     if read_times > 6 {
-                                        let callback = move |_handle| {
-                                            app::quit();
-                                        };
-                                        let _handle = app::add_timeout3(0.1, callback);
-                                        break;
+                                        end_game_flag = true;
+                                        matches_count += 1;
+                                        let mut str =
+                                            format! {"Fail,ans:{}",ans_word.to_uppercase()};
+                                        if is_stats {
+                                            str.push_str(&stats_print(
+                                                &mut word_frequency,
+                                                matches_win_count,
+                                                guess_attempts_sum,
+                                                matches_count,
+                                                is_tty,
+                                                true,
+                                            ));
+                                        }
+                                        out.set_text_size(8);
+                                        out.set_value(&str);
+                                        app.redraw();
                                     }
                                     col_index = 0;
                                     str.clear();
-                                    //app.redraw();
                                 }
                                 Ops::None => {}
+                                Ops::Play => {
+                                    if end_game_flag {
+                                        if is_w {
+                                            gui_continue_flag = false;
+                                        } else {
+                                            gui_continue_flag = true;
+                                        }
+                                        if is_state {
+                                            gui_round = Round {
+                                                answer: Some(ans_word.to_ascii_uppercase()),
+                                                guesses: Some(guesses_in_word.clone()),
+                                            }
+                                        }
+                                        ans_word.clear();
+                                        app.quit();
+                                    }
+                                }
+                                Ops::Quit => {
+                                    if end_game_flag {
+                                        gui_continue_flag = false;
+                                        if is_state {
+                                            gui_round = Round {
+                                                answer: Some(ans_word.to_ascii_uppercase()),
+                                                guesses: Some(guesses_in_word.clone()),
+                                            }
+                                        }
+                                        ans_word.clear();
+                                        app.quit();
+                                    }
+                                }
                             }
                         }
                     }
                 }
             }
-            //app.run().unwrap();
         } else {
-            read_times=0;
+            read_times = 0;
             while (read_times < 6) {
-                //a test for wordle solver
-                /*if read_times>=3{
-                    let t=wordle_solver::possible_ans(&acceptable_set, &guesses,true);
-                    wordle_solver::recommend(&t);
-                }*/
+                //wordle_solver_use
+                match cli.solver {
+                    Some(r) => {
+                        if read_times >= r {
+                            let t = wordle_solver::possible_ans(&acceptable_set, &guesses, true);
+                            wordle_solver::recommend(&t);
+                        }
+                    }
+                    None => {}
+                }
+
                 read_times += 1;
                 let mut guess_word = String::new();
                 guess_word = read_guessword(is_tty, read_times);
@@ -944,7 +1064,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     is_difficult,
                     &mut guesses,
                 );
-                if (flag == false) {
+                if flag == false {
                     //create element in guesses
                     read_times -= 1;
                     flag_invalid_print(is_tty);
@@ -970,20 +1090,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             //check guess and answer_word is equal
         }
         //print final result
-        print_final_result(is_tty, win_flag, &ans_word, read_times);
+        if !cli.gui {
+            print_final_result(is_tty, win_flag, &ans_word, read_times);
+        }
         //update data for this match
-        matches_count += 1;
-        if win_flag == 1 {
-            matches_win_count += 1;
-            guess_attempts_sum += read_times;
-        } else {
+        if !cli.gui {
+            matches_count += 1;
+            if win_flag == 1 {
+                matches_win_count += 1;
+                guess_attempts_sum += read_times;
+                // println!("guess_attempts_sum:{}",guess_attempts_sum);
+            } else {
+            }
         }
         //if --stats,update json
         if is_state {
-            let this_round_data = Round {
-                answer: Some(ans_word.to_uppercase()),
-                guesses: Some(guesses_in_word.clone()),
-            };
+            let mut this_round_data: Round;
+            if cli.gui {
+                this_round_data = gui_round;
+            } else {
+                this_round_data = Round {
+                    answer: Some(ans_word.to_uppercase()),
+                    guesses: Some(guesses_in_word.clone()),
+                };
+            }
             history_record.push(this_round_data);
             let state_update = State {
                 total_rounds: Some(matches_count),
@@ -994,7 +1124,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             buffer.write(write_json.as_bytes())?;
         }
         //if -t,print stats
-        if is_stats {
+        if is_stats && (!cli.gui) {
             //sort frequency
             //fn stats_print(&mut word_frequency: HashMap<String, i32>,matches_win_count,guess_attempts_sum,matches_count);
             stats_print(
@@ -1003,11 +1133,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 guess_attempts_sum,
                 matches_count,
                 is_tty,
+                false,
             );
         }
         //determine if break
         if is_w {
             break;
+        }
+        if cli.gui {
+            if gui_continue_flag {
+                continue;
+            } else {
+                break;
+            }
         } else if is_tty {
             let str = format!("Do you want to play another round?(y/n)(default is n)");
             println!("{}", console::style(str).italic().magenta());

@@ -137,7 +137,7 @@ pub fn recommend(possible: &BTreeSet<String>) -> Vec<(String, f64)> {
     });
     let mut final_vec = Vec::new();
     let mut index = 0;
-    while index < 5 && index < vector.len() {
+    while index < 5 && !vector.is_empty() {
         let t = vector.pop().unwrap();
         index += 1;
         final_vec.push(t);

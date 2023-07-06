@@ -17,6 +17,8 @@ use super::status::Status;
 pub enum Ops {
     Backspace,
     Enter,
+    Play,
+    Quit,
     None,
 }
 
@@ -51,6 +53,9 @@ impl MyButton {
                 b.resize(0, 0, 114, 0);
                 b.set_color(Color::Light3);
                 b.set_shortcut(Shortcut::None | title.chars().next().unwrap());
+            }
+            "Play" | "Quit" => {
+                b.set_color(Color::Yellow);
             }
             _ => {
                 b.set_color(Color::Light3);
@@ -114,6 +119,7 @@ pub fn gui_init() -> (
     Vec<MyButton>,
     Vec<MyButton>,
     Vec<Vec<MyButton>>,
+    Output,
 ) {
     let app = app::App::default();
     let win_w = 800;
@@ -126,6 +132,16 @@ pub fn gui_init() -> (
         .with_size(win_w, win_h)
         .center_screen();
     wind.set_color(Color::Light3);
+
+    let mut out = Output::new(border, 900, win_w - 40, 100, "");
+    out.set_text_size(20);
+    out.set_value("Welcome to wordle!");
+
+    let mut hpack = Pack::new(334, 800, 152, 100, "");
+    let mut play_but = MyButton::new("Play");
+    let mut quit_but = MyButton::new("Quit");
+    hpack.end();
+    hpack.set_type(PackType::Horizontal);
 
     let tpack = Pack::new(200, 40, win_w - 400, 360, "");
     let mut hpack = Pack::new(0, 0, win_w - 400, 60, "");
@@ -230,16 +246,16 @@ pub fn gui_init() -> (
     but_vec.append(&mut vec![butg, buth, buti, butj, butk, butl, butm, butn]);
     but_vec.append(&mut vec![buto, butp, butq, butr, buts, butt, butu, butv]);
     but_vec.append(&mut vec![butw, butx, buty, butz]);
-    let mut op_vec = vec![butet, butbs];
+    let mut op_vec = vec![butet, butbs, play_but, quit_but];
     let mut row1_vec = vec![but1, but2, but3, but4, but5];
     let mut row2_vec = vec![but6, but7, but8, but9, but10];
     let mut row3_vec = vec![but11, but12, but13, but14, but15];
     let mut row4_vec = vec![but16, but17, but18, but19, but20];
     let mut row5_vec = vec![but21, but22, but23, but24, but25];
     let mut row6_vec = vec![but26, but27, but28, but29, but30];
-    let mut table_vec = vec![row1_vec, row2_vec, row3_vec, row4_vec, row5_vec,row6_vec];
+    let mut table_vec = vec![row1_vec, row2_vec, row3_vec, row4_vec, row5_vec, row6_vec];
     //let str=input_guess_word(app, &mut but_vec, &mut op_vec, &mut table_vec, 0);
     //println!("{}",str.clone());
     //app.run().unwrap();
-    return (app, wind, but_vec, op_vec, table_vec);
+    return (app, wind, but_vec, op_vec, table_vec, out);
 }

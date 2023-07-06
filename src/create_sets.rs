@@ -1,9 +1,9 @@
-use std::{clone, fmt, mem};
 use std::cmp::Ordering;
 use std::collections::{BTreeSet, HashMap};
 use std::error::Error;
 use std::fs::File;
 use std::io::{self, Read, Write};
+use std::{clone, fmt, mem};
 //mod super::builtin_words;
 #[derive(Debug)]
 pub struct DictionaryError {
