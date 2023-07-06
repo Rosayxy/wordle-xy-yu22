@@ -1,4 +1,5 @@
 mod builtin_words;
+mod wordle_solver;
 use builtin_words::ACCEPTABLE;
 mod gui;
 use crate::gui::{Message, Ops};
@@ -28,7 +29,9 @@ use std::{thread, time};
 use text_io::read;
 mod status;
 use status::Status;
-//error_display
+mod create_sets;
+use create_sets::{create_set_from_builtin,create_set_from_file,sets_create,DictionaryError};
+
 #[derive(Debug)]
 struct ArgumentConflictError;
 impl fmt::Display for ArgumentConflictError {
@@ -75,59 +78,7 @@ fn shuffle_error_output(is_tty: bool) -> Box<dyn std::error::Error> {
     }
     a_boxed_error
 }
-#[derive(Debug)]
-struct DictionaryError {
-    error_type: i32,
-}
-impl fmt::Display for DictionaryError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "An error")
-    }
-}
-impl Error for DictionaryError {}
-impl DictionaryError {
-    fn new(error_type: i32) -> DictionaryError {
-        return DictionaryError { error_type };
-    }
-}
-fn dictionary_error_output(r: DictionaryError, is_tty: bool) -> Box<dyn std::error::Error> {
-    let dictionary_error = &r;
-    let error_type = dictionary_error.error_type;
-    let a_boxed_error = Box::<dyn Error>::from(r);
-    if is_tty {
-        if error_type == 0 {
-            println!(
-                "{}",
-                console::style("You have redundant words in your acceptable dictionary")
-                    .bold()
-                    .red()
-            );
-        } else {
-            println!(
-                "{}",
-                console::style("Your acceptable dictionary might has the wrong format")
-                    .bold()
-                    .red()
-            );
-        }
-        io::stdout().flush().unwrap();
-    }
-    a_boxed_error
-}
-fn subset_error_output(is_tty: bool) -> Box<dyn std::error::Error> {
-    let subset_error = DictionaryError::new(3);
-    if is_tty {
-        println!(
-            "{}",
-            console::style("Your acceptable word set is not a subset of the final set")
-                .bold()
-                .red()
-        );
-        io::stdout().flush().unwrap();
-    }
-    let a_boxed_error = Box::<dyn Error>::from(subset_error);
-    a_boxed_error
-}
+#[inline(always)]
 fn read_guessword(is_tty: bool, read_times: usize) -> String {
     if is_tty {
         let str = format!("your {} guess:(good luck)", read_times);
@@ -142,6 +93,7 @@ fn read_guessword(is_tty: bool, read_times: usize) -> String {
     guess_word
 }
 /// The main function for the Wordle game, implement your own logic here
+#[inline(always)]
 fn update_letter_status(ans_word: &str, guess_word: &str, letter_status: &mut [i32; 26]) {
     let mut guess_index = 0;
     for cguess in guess_word.chars() {
@@ -165,6 +117,7 @@ fn update_letter_status(ans_word: &str, guess_word: &str, letter_status: &mut [i
         }
     }
 }
+#[inline(always)]
 fn create_guesses_ele(ans_word: &str, guess_word: &str) -> Vec<(char, Status)> {
     let mut vec_guesses_ele = Vec::new();
     let mut guess_index = 0;
@@ -234,34 +187,7 @@ fn create_guesses_ele(ans_word: &str, guess_word: &str) -> Vec<(char, Status)> {
     }
     return vec_guesses_ele;
 }
-fn create_set_from_builtin(array: &[&str]) -> BTreeSet<String> {
-    let mut t = BTreeSet::new();
-    for i in array {
-        t.insert(i.to_string().to_uppercase());
-    }
-    return t;
-}
-fn create_set_from_file(file_name: String) -> Result<BTreeSet<String>, DictionaryError> {
-    let mut t = BTreeSet::new();
-    let mut f = File::open(file_name).unwrap();
-    let mut buffer = String::new();
-    f.read_to_string(&mut buffer).unwrap();
-    //check file format
-    let mut file_index = 0;
-    for i in buffer.chars() {
-        if (file_index % 6 == 5) && (i != '\n') {
-            return Err(DictionaryError { error_type: 1 });
-        }
-    }
-    for word in buffer.split("\n") {
-        if t.contains(word) {
-            return Err(DictionaryError { error_type: 0 });
-        } else {
-            t.insert(word.to_string().to_uppercase());
-        }
-    }
-    return Ok(t);
-}
+
 #[derive(Serialize, Deserialize, Clone)]
 struct Round {
     answer: Option<String>,
@@ -294,6 +220,7 @@ fn json_error_output(error: ParseJsonError, is_tty: bool) -> Box<dyn std::error:
     let a_boxed_error = Box::<dyn Error>::from(parse_error);
     a_boxed_error
 }
+#[inline(always)]
 fn assign_state(
     str: &str,
     previous_answord: &mut BTreeSet<String>,
@@ -325,9 +252,9 @@ fn assign_state(
                 Some(r) => {
                     //history_restore
                     total_rounds += r.len() as i32;
-                    for i in r.clone() {
+                    for i in &r{
                         history.push(i.clone());
-                        match i.answer {
+                        match &i.answer {
                             None => {}
                             Some(rr) => {
                                 previous_answord.insert(rr.clone());
@@ -335,7 +262,7 @@ fn assign_state(
                                     None => {}
                                     Some(guesses_string) => {
                                         //if wins
-                                        if *guesses_string.last().unwrap() == rr.clone() {
+                                        if guesses_string.last().unwrap() == rr {
                                             win_rounds += 1;
                                             guess_attempts_sum += guesses_string.len();
                                         }
@@ -365,9 +292,9 @@ fn assign_state(
                         return Err(ParseJsonError {});
                     }
                     total_rounds += r.len() as i32;
-                    for i in r.clone() {
+                    for i in &r {
                         history.push(i.clone());
-                        match i.answer {
+                        match &i.answer {
                             None => {}
                             Some(rr) => {
                                 previous_answord.insert(rr.clone());
@@ -375,7 +302,7 @@ fn assign_state(
                                     None => {}
                                     Some(guesses_string) => {
                                         //if wins
-                                        if *guesses_string.last().unwrap() == rr {
+                                        if guesses_string.last().unwrap() == rr {
                                             win_rounds += 1;
                                             guess_attempts_sum += guesses_string.len();
                                         }
@@ -396,6 +323,7 @@ fn assign_state(
         }
     }
 }
+
 #[derive(Parser)]
 struct Cli {
     #[arg(short, long)]
@@ -433,6 +361,7 @@ struct Config {
     state: Option<String>,
     word: Option<String>,
 }
+
 fn parse_file_config(conf: String, is_tty: bool) -> Result<Config, ParseJsonError> {
     let mut f = std::fs::File::open(conf.clone()).unwrap();
     let mut buffer = String::new();
@@ -460,6 +389,7 @@ fn parse_file_config(conf: String, is_tty: bool) -> Result<Config, ParseJsonErro
         }
     }
 }
+
 fn update_config<T: Clone>(file_config: Option<T>, cli_config: Option<T>) -> Option<T> {
     match cli_config {
         None => match file_config {
@@ -469,6 +399,7 @@ fn update_config<T: Clone>(file_config: Option<T>, cli_config: Option<T>) -> Opt
         Some(cli_config) => Some(cli_config.clone()),
     }
 }
+
 fn print_welcome_message(is_tty: bool) {
     if is_tty {
         let mut line = String::new();
@@ -478,6 +409,7 @@ fn print_welcome_message(is_tty: bool) {
         println!("Welcome to wordle, {}!", line.trim());
     }
 }
+#[inline(always)]
 fn rand_seed_generate(
     seed: u64,
     mut day: i32,
@@ -500,6 +432,7 @@ fn rand_seed_generate(
     }
     ans_word
 }
+#[inline(always)]
 fn stdin_answord(is_tty: bool) -> String {
     if is_tty {
         print!(
@@ -516,6 +449,7 @@ fn stdin_answord(is_tty: bool) -> String {
     let mut ans_word = line.trim().to_string();
     ans_word
 }
+
 fn ans_word_invalid_output(is_tty: bool) -> Box<dyn std::error::Error> {
     let answord_error = DictionaryError::new(4);
     if is_tty {
@@ -530,6 +464,7 @@ fn ans_word_invalid_output(is_tty: bool) -> Box<dyn std::error::Error> {
     let a_boxed_error = Box::<dyn Error>::from(answord_error);
     a_boxed_error
 }
+#[inline(always)]
 fn invalid_check(
     acceptable_set: &BTreeSet<String>,
     guess_word: String,
@@ -578,6 +513,7 @@ fn invalid_check(
     }
     flag
 }
+#[inline]
 fn flag_invalid_print(is_tty: bool) {
     if (is_tty) {
         println!(
@@ -591,6 +527,34 @@ fn flag_invalid_print(is_tty: bool) {
         println!("INVALID");
     }
 }
+#[inline(always)]
+fn status_output(
+    is_tty: bool,
+    flag: bool,
+    guesses: &Vec<Vec<(char, Status)>>,
+    letter_status: &[i32; 26],
+) {
+    if (is_tty == false) && (flag) {
+        //print!("{} ",guess_word);
+        let ele = guesses.last().expect("guesses_last_not_found");
+        for it in ele {
+            print!("{}", it.1.parse_to_char());
+        }
+        print!(" ");
+        for letter in letter_status {
+            print!("{}", Status::new_from_value(*letter).parse_to_char());
+        }
+        println!("");
+    } else if is_tty == true {
+        for ele in guesses {
+            for it in ele {
+                it.1.print_color((it.0 as u8 + 'A' as u8 - 'a' as u8) as char);
+            }
+            println!("");
+        }
+    }
+}
+#[inline(always)]
 fn print_final_result(is_tty: bool, win_flag: i32, ans_word: &str, read_times: usize) {
     if win_flag == 1 {
         if is_tty {
@@ -611,6 +575,7 @@ fn print_final_result(is_tty: bool, win_flag: i32, ans_word: &str, read_times: u
         }
     }
 }
+#[inline(always)]
 fn stats_print(
     word_frequency: &mut HashMap<String, i32>,
     matches_win_count: i32,
@@ -748,45 +713,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         None => String::new(),
         Some(s) => s.clone(),
     };
-    //create final and acceptable sets
+
+    //create final and acceptable set
     let mut acceptable_set = BTreeSet::new();
     let mut final_set = BTreeSet::new();
-    match &current_config.acceptable_set {
-        None => {
-            acceptable_set = create_set_from_builtin(builtin_words::ACCEPTABLE);
+    //fn sets_create(config_acceptable:&Option<String>,config_final:&Option<String>)->Result<(BTreeSet<String>,BTreeSet<String>),Box<dyn std::error::Error>>
+    let result = sets_create(
+        &current_config.acceptable_set,
+        &current_config.final_set,
+        is_tty,
+    );
+    match result {
+        Ok((a, f)) => {
+            (acceptable_set, final_set) = (a, f);
         }
-        Some(str) => {
-            let set = create_set_from_file(str.clone());
-            match set {
-                Err(r) => {
-                    return Err(dictionary_error_output(r, is_tty));
-                }
-                Ok(r) => {
-                    acceptable_set = r;
-                }
-            }
+        Err(r) => {
+            return Err(r);
         }
     }
-    match &current_config.final_set {
-        None => {
-            final_set = create_set_from_builtin(builtin_words::FINAL);
-        }
-        Some(str) => {
-            let set = create_set_from_file(str.clone());
-            match set {
-                Err(r) => {
-                    return Err(dictionary_error_output(r, is_tty));
-                }
-                Ok(r) => {
-                    final_set = r;
-                }
-            }
-        }
-    }
-    //check if the two sets are subsets
-    if !(final_set.is_subset(&acceptable_set)) {
-        return Err(subset_error_output(is_tty));
-    }
+
     //judge random_mode and word conflict
     if (is_random_mode) && is_w {
         return Err(argument_conflict_error_output(is_tty));
@@ -795,6 +740,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     else if (!is_random_mode) && (current_config.seed.is_some() || current_config.day.is_some()) {
         return Err(shuffle_error_output(is_tty));
     }
+
     //parse json
     let mut json_file_name = String::new();
     match &current_config.state {
@@ -820,6 +766,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     }
+
     //game starts
     let mut line = String::new();
     loop {
@@ -859,7 +806,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         //read from input:
         let mut win_flag = 0;
         let mut read_times = 1;
-        if true {
+        if false {
             let (mut app, mut wind, mut but_vec, mut op_vec, mut table_vec) = gui::gui_init();
             let mut col_index = 0;
             let mut str = String::new();
@@ -979,7 +926,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             //app.run().unwrap();
         } else {
+            read_times=0;
             while (read_times < 6) {
+                //a test for wordle solver
+                /*if read_times>=3{
+                    let t=wordle_solver::possible_ans(&acceptable_set, &guesses,true);
+                    wordle_solver::recommend(&t);
+                }*/
                 read_times += 1;
                 let mut guess_word = String::new();
                 guess_word = read_guessword(is_tty, read_times);
@@ -1001,31 +954,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     //create element in guesses
                     guesses.push(create_guesses_ele(&ans_word, &guess_word));
                     //update word_frequency
-                    let key = guess_word.to_lowercase();
-                    let word_frequency_ref = word_frequency.entry(key).or_insert(0);
+                    let key = &guess_word;
+                    let word_frequency_ref = word_frequency.entry(key.to_string()).or_insert(0);
                     *word_frequency_ref += 1;
                     guesses_in_word.push(guess_word.clone().to_uppercase());
                 }
                 //output:
-                if (is_tty == false) && (flag) {
-                    //print!("{} ",guess_word);
-                    let ele = guesses.last().expect("guesses_last_not_found");
-                    for it in ele {
-                        print!("{}", it.1.parse_to_char());
-                    }
-                    print!(" ");
-                    for letter in &letter_status {
-                        print!("{}", Status::new_from_value(*letter).parse_to_char());
-                    }
-                    println!("");
-                } else if is_tty == true {
-                    for ele in &guesses {
-                        for it in ele {
-                            it.1.print_color((it.0 as u8 + 'A' as u8 - 'a' as u8) as char);
-                        }
-                        println!("");
-                    }
-                }
+                //status_output(is_tty:bool,flag:bool,guesses:&Vec<Vec<(char, Status)>>,letter_status:&[i32,26])
+                status_output(is_tty, flag, &guesses, &letter_status);
                 if guess_word == ans_word {
                     win_flag = 1;
                     break;
@@ -1045,7 +981,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         //if --stats,update json
         if is_state {
             let this_round_data = Round {
-                answer: Some(ans_word.clone().to_uppercase()),
+                answer: Some(ans_word.to_uppercase()),
                 guesses: Some(guesses_in_word.clone()),
             };
             history_record.push(this_round_data);
